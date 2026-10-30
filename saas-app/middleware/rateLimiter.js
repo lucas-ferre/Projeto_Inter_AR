@@ -156,6 +156,4 @@ const createRateLimiter = ({
 
 module.exports = {
   createRateLimiter,
-  createMemoryRateLimitStore,
-  createMongoRateLimitStore,
 };

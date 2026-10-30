@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SaaS App - Testes Completos",
-    "description": "Coleção completa e idempotente de testes da API SaaS Multitenant (Node.js + Express 5 + MongoDB). Gera identificadores únicos por execução ({{runId}}) e salva automaticamente {{tenantId}}, {{token}} e {{user2Id}}.",
+    "description": "Coleção completa e idempotente de testes da API SaaS Multitenant (Node.js + Express 5 + MongoDB). Gera identificadores únicos por execução ({{runId}}) e salva automaticamente {{tenantId}}, {{token}}, {{memberToken}} e {{user2Id}}.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -9,6 +9,7 @@
     { "key": "runId", "value": "1" },
     { "key": "tenantId", "value": "" },
     { "key": "token", "value": "" },
+    { "key": "memberToken", "value": "" },
     { "key": "user2Id", "value": "" }
   ],
   "item": [
@@ -249,7 +250,69 @@
       }
     },
     {
-      "name": "7. Consultar Dados do Tenant (Protegida)",
+      "name": "7. Login 2º Usuário (Member - Gera memberToken)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login de membro retorna JWT e role member (200)', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const data = pm.response.json();",
+              "  pm.expect(data.token).to.be.a('string');",
+              "  pm.expect(data.user.role).to.eql('member');",
+              "  pm.collectionVariables.set('memberToken', data.token);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user2.{{runId}}@empresa.com\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "8. Tentar Excluir Tenant com memberToken (Deve bloquear com 403 RBAC)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Bloqueia ação administrativa de membro com 403', function () {",
+              "  pm.response.to.have.status(403);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{memberToken}}", "type": "string" }]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenantId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenantId}}"]
+        }
+      }
+    },
+    {
+      "name": "9. Consultar Dados do Tenant (Protegida)",
       "event": [
         {
           "listen": "test",
@@ -280,7 +343,7 @@
       }
     },
     {
-      "name": "8. Atualizar Nome do Tenant (Admin)",
+      "name": "10. Atualizar Nome do Tenant (Admin)",
       "event": [
         {
           "listen": "test",
@@ -313,7 +376,7 @@
       }
     },
     {
-      "name": "9. Listar Usuários do Tenant (Protegida)",
+      "name": "11. Listar Usuários do Tenant (Protegida)",
       "event": [
         {
           "listen": "test",
@@ -344,7 +407,7 @@
       }
     },
     {
-      "name": "10. Atualizar 2º Usuário (PATCH /users/:id)",
+      "name": "12. Atualizar 2º Usuário (PATCH /users/:id)",
       "event": [
         {
           "listen": "test",
@@ -362,7 +425,7 @@
       "request": {
         "auth": {
           "type": "bearer",
-          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+          "bearer": [{ "key": "token", "value": "{{memberToken}}", "type": "string" }]
         },
         "method": "PATCH",
         "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -378,7 +441,7 @@
       }
     },
     {
-      "name": "11. Remover 2º Usuário (Admin)",
+      "name": "13. Remover 2º Usuário (Admin)",
       "event": [
         {
           "listen": "test",
@@ -407,7 +470,36 @@
       }
     },
     {
-      "name": "12. Limpeza Final - Remover Tenant de Teste (Admin)",
+      "name": "14. Testar Revogação Imediata de memberToken após Exclusão (Deve retornar 401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Token do membro excluído é rejeitado imediatamente com 401', function () {",
+              "  pm.response.to.have.status(401);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{memberToken}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["users"]
+        }
+      }
+    },
+    {
+      "name": "15. Limpeza Final - Remover Tenant de Teste (Admin)",
       "event": [
         {
           "listen": "test",
