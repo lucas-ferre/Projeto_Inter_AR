@@ -14,7 +14,7 @@ const nodeCmd = 'node';
 execFileSync(npmCmd, ['install'], { cwd: saasAppDir, stdio: 'inherit' });
 
 console.log('[devcontainer] Configurando saas-app/.env...');
-execFileSync(nodeCmd, ['scripts/setup-env.js'], { cwd: saasAppDir, stdio: 'inherit' });
+execFileSync(nodeCmd, ['scripts/setup-env.js', '--yes'], { cwd: saasAppDir, stdio: 'inherit' });
 
 if (fs.existsSync(envPath)) {
   let envContent = fs.readFileSync(envPath, 'utf8');

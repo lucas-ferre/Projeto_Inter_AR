@@ -96,10 +96,35 @@ const startServer = async () => {
   }
 
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim().length < MIN_JWT_SECRET_LENGTH) {
-    console.error(
-      `JWT_SECRET ausente ou fraca no arquivo .env (mínimo de ${MIN_JWT_SECRET_LENGTH} caracteres).`
-    );
-    process.exit(1);
+    if (process.stdin.isTTY) {
+      const readline = require('readline');
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const answer = await new Promise((resolve) => {
+        rl.question(
+          `\n[server] JWT_SECRET ausente ou fraca no .env (mínimo de ${MIN_JWT_SECRET_LENGTH} caracteres).\nDeseja executar o script para gerar e configurar a chave automaticamente agora? (S/n): `,
+          (ans) => {
+            rl.close();
+            resolve(ans.trim().toLowerCase());
+          }
+        );
+      });
+
+      const wantsAutoSetup = answer === '' || ['s', 'sim', 'y', 'yes'].includes(answer);
+      if (wantsAutoSetup) {
+        const { execFileSync } = require('child_process');
+        execFileSync(process.execPath, [path.join(__dirname, 'scripts', 'setup-env.js'), '--yes'], {
+          stdio: 'inherit',
+        });
+        require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
+      }
+    }
+
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim().length < MIN_JWT_SECRET_LENGTH) {
+      console.error(
+        `JWT_SECRET ausente ou fraca no arquivo .env (mínimo de ${MIN_JWT_SECRET_LENGTH} caracteres).`
+      );
+      process.exit(1);
+    }
   }
 
   try {
