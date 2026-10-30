@@ -1,0 +1,439 @@
+{
+  "info": {
+    "name": "SaaS App - Testes Completos",
+    "description": "Coleção completa e idempotente de testes da API SaaS Multitenant (Node.js + Express 5 + MongoDB). Gera identificadores únicos por execução ({{runId}}) e salva automaticamente {{tenantId}}, {{token}} e {{user2Id}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "runId", "value": "1" },
+    { "key": "tenantId", "value": "" },
+    { "key": "token", "value": "" },
+    { "key": "user2Id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "0. Listar Planos Disponíveis (Plan no MongoDB)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Retorna 200 e lista de planos', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const data = pm.response.json();",
+              "  pm.expect(data).to.be.an('array');",
+              "  pm.expect(data.map(p => p.name)).to.include.members(['freemium', 'premium']);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/plans",
+          "host": ["{{baseUrl}}"],
+          "path": ["plans"]
+        }
+      }
+    },
+    {
+      "name": "1. Criar Tenant (Freemium)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.collectionVariables.set('runId', Date.now().toString());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Tenant criado com status 201', function () {",
+              "  pm.response.to.have.status(201);",
+              "  const data = pm.response.json();",
+              "  pm.expect(data._id).to.be.a('string');",
+              "  pm.collectionVariables.set('tenantId', data._id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Empresa Exemplo {{runId}}\",\n  \"plan\": \"freemium\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/tenants",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants"]
+        }
+      }
+    },
+    {
+      "name": "2. Registrar 1º Usuário (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('1º usuário registrado como admin (201)', function () {",
+              "  pm.response.to.have.status(201);",
+              "  const data = pm.response.json();",
+              "  pm.expect(data._id).to.be.a('string');",
+              "  pm.expect(data.role).to.eql('admin');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Lucas Admin\",\n  \"email\": \"admin.{{runId}}@empresa.com\",\n  \"password\": \"123456\",\n  \"tenantId\": \"{{tenantId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "register"]
+        }
+      }
+    },
+    {
+      "name": "3. Login Admin (Gera Token JWT)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Login retorna JWT e usuário com _id', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const data = pm.response.json();",
+              "  pm.expect(data.token).to.be.a('string');",
+              "  pm.expect(data.user._id).to.be.a('string');",
+              "  pm.collectionVariables.set('token', data.token);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"admin.{{runId}}@empresa.com\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      }
+    },
+    {
+      "name": "4. Adicionar 2º Usuário (Rota Protegida Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('2º usuário criado como member (201)', function () {",
+              "  pm.response.to.have.status(201);",
+              "  const data = pm.response.json();",
+              "  pm.expect(data.role).to.eql('member');",
+              "  pm.collectionVariables.set('user2Id', data._id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Usuário 2\",\n  \"email\": \"user2.{{runId}}@empresa.com\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["users"]
+        }
+      }
+    },
+    {
+      "name": "5. Adicionar 3º Usuário (Limite Freemium)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('3º usuário criado com sucesso (201)', function () {",
+              "  pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Usuário 3\",\n  \"email\": \"user3.{{runId}}@empresa.com\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["users"]
+        }
+      }
+    },
+    {
+      "name": "6. Tentar 4º Usuário (Deve bloquear com 403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Bloqueia 4º usuário no plano freemium com 403', function () {",
+              "  pm.response.to.have.status(403);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Usuário 4\",\n  \"email\": \"user4.{{runId}}@empresa.com\",\n  \"password\": \"123456\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["users"]
+        }
+      }
+    },
+    {
+      "name": "7. Consultar Dados do Tenant (Protegida)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Retorna dados do tenant (200)', function () {",
+              "  pm.response.to.have.status(200);",
+              "  const data = pm.response.json();",
+              "  pm.expect(data._id).to.eql(pm.collectionVariables.get('tenantId'));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenantId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenantId}}"]
+        }
+      }
+    },
+    {
+      "name": "8. Atualizar Nome do Tenant (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Atualiza nome do tenant (200)', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Empresa Renomeada {{runId}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenantId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenantId}}"]
+        }
+      }
+    },
+    {
+      "name": "9. Listar Usuários do Tenant (Protegida)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Lista 3 usuários com X-Total-Count', function () {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json()).to.have.lengthOf(3);",
+              "  pm.expect(pm.response.headers.get('X-Total-Count')).to.eql('3');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenantId}}/users",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenantId}}", "users"]
+        }
+      }
+    },
+    {
+      "name": "10. Atualizar 2º Usuário (PATCH /users/:id)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Atualiza usuário com sucesso (200)', function () {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().name).to.eql('Usuário 2 Atualizado');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Usuário 2 Atualizado\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/users/{{user2Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "{{user2Id}}"]
+        }
+      }
+    },
+    {
+      "name": "11. Remover 2º Usuário (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Remove 2º usuário (200)', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/users/{{user2Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["users", "{{user2Id}}"]
+        }
+      }
+    },
+    {
+      "name": "12. Limpeza Final - Remover Tenant de Teste (Admin)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Remove tenant e usuários restantes (200)', function () {",
+              "  pm.response.to.have.status(200);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/tenants/{{tenantId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["tenants", "{{tenantId}}"]
+        }
+      }
+    }
+  ]
+}
