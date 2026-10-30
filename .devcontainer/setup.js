@@ -10,22 +10,19 @@ const envPath = path.join(saasAppDir, '.env');
 
 console.log('[devcontainer] Instalando dependências em saas-app...');
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const nodeCmd = 'node';
 execFileSync(npmCmd, ['install'], { cwd: saasAppDir, stdio: 'inherit' });
 
-if (!fs.existsSync(envPath)) {
-  const jwtSecret = crypto.randomBytes(64).toString('hex');
-  const template = fs.readFileSync(envExamplePath, 'utf8').replace(/\r\n/g, '\n');
+console.log('[devcontainer] Configurando saas-app/.env...');
+execFileSync(nodeCmd, ['scripts/setup-env.js'], { cwd: saasAppDir, stdio: 'inherit' });
 
-  const configuredEnv = template
-    .replace(/^JWT_SECRET=.*$/m, `JWT_SECRET=${jwtSecret}`)
-    .replace(/^TRUST_PROXY=.*$/m, 'TRUST_PROXY=1');
-
-  fs.writeFileSync(envPath, configuredEnv, { encoding: 'utf8', mode: 0o600 });
-  console.log(
-    '[devcontainer] Arquivo saas-app/.env criado automaticamente com JWT_SECRET seguro e TRUST_PROXY=1.'
-  );
-} else {
-  console.log('[devcontainer] Arquivo saas-app/.env já existe e foi preservado.');
+if (fs.existsSync(envPath)) {
+  let envContent = fs.readFileSync(envPath, 'utf8');
+  if (/^TRUST_PROXY=$/m.test(envContent) || !/^TRUST_PROXY=/m.test(envContent)) {
+    envContent = envContent.replace(/^TRUST_PROXY=.*$/m, 'TRUST_PROXY=1');
+    fs.writeFileSync(envPath, envContent, 'utf8');
+    console.log('[devcontainer] TRUST_PROXY configurado para 1 (proxy reverso do Codespaces).');
+  }
 }
 
 console.log('\n[devcontainer] Ambiente pronto!');

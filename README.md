@@ -16,7 +16,14 @@ cd saas-app
 npm install
 ```
 
-2. Crie o arquivo `saas-app/.env` a partir de `saas-app/.env.example`:
+2. Configure o arquivo `saas-app/.env` (você pode gerar automaticamente com o script incluído):
+
+```bash
+# Cria o .env e gera uma JWT_SECRET criptográfica forte (64 bytes / 128 hex):
+npm run setup:env
+```
+
+Ou copie manualmente de `saas-app/.env.example`:
 
 ```env
 NODE_ENV=development
