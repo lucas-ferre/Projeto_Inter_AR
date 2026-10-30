@@ -4,5 +4,6 @@ module.exports = (req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
   next();
 };

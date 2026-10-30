@@ -54,8 +54,26 @@ Com `RATE_LIMIT_STORE=mongodb`, os contadores são compartilhados entre instânc
 4. Execute a suíte de testes automatizados:
 
 ```bash
+# Testes unitários e de integração interna (Node test runner)
 npm test
+
+# Suíte de scripts E2E próprios (test-scripts/)
+npm run test:scripts
 ```
+
+## Scripts Próprios de Teste (`test-scripts/`)
+
+O projeto dispõe de uma pasta dedicada com scripts de teste de ponta a ponta que realizam chamadas HTTP reais contra a API:
+
+- **`node test-scripts/run-all.js`**: Executa todas as suítes e emite relatório consolidado.
+- **`node test-scripts/test-smoke.js`**: Validação de endpoints públicos, planos e headers de segurança/rate limit.
+- **`node test-scripts/test-onboarding.js`**: Validação do ciclo de vida do `registrationToken` e bloqueio de planos pagos.
+- **`node test-scripts/test-rbac.js`**: Validação de controle de papéis (`admin` vs `member`) e revogação imediata de token.
+- **`node test-scripts/test-isolation.js`**: Validação do isolamento de tenants e unicidade de e-mail por empresa.
+- **`node test-scripts/test-concurrency.js`**: Teste de carga e concorrência atômica sob limite de vagas e admins.
+- **`node test-scripts/test-rate-limit.js`**: Teste de bloqueio HTTP 429 e `Retry-After`.
+
+Consulte [test-scripts/README.md](file:///C:/Users/lucas/Downloads/Lucas/Capacita/Projeto_Inter_AR/test-scripts/README.md) para documentação completa.
 
 ## Execução no GitHub Codespaces / Dev Containers
 
