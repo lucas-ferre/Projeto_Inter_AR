@@ -1,13 +1,14 @@
 {
   "info": {
     "name": "SaaS App - Testes Completos",
-    "description": "Coleção completa e idempotente de testes da API SaaS Multitenant (Node.js + Express 5 + MongoDB). Gera identificadores únicos por execução ({{runId}}) e salva automaticamente {{tenantId}}, {{token}}, {{memberToken}} e {{user2Id}}.",
+    "description": "Coleção completa e idempotente de testes da API SaaS Multitenant (Node.js + Express 5 + MongoDB). Gera identificadores únicos por execução ({{runId}}) e salva automaticamente {{tenantId}}, {{registrationToken}}, {{token}}, {{memberToken}} e {{user2Id}}.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:3000" },
     { "key": "runId", "value": "1" },
     { "key": "tenantId", "value": "" },
+    { "key": "registrationToken", "value": "" },
     { "key": "token", "value": "" },
     { "key": "memberToken", "value": "" },
     { "key": "user2Id", "value": "" }
@@ -63,6 +64,8 @@
               "  const data = pm.response.json();",
               "  pm.expect(data._id).to.be.a('string');",
               "  pm.collectionVariables.set('tenantId', data._id);",
+              "  pm.expect(data.registrationToken).to.be.a('string');",
+              "  pm.collectionVariables.set('registrationToken', data.registrationToken);",
               "});"
             ]
           }
@@ -105,7 +108,7 @@
         "header": [{ "key": "Content-Type", "value": "application/json" }],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"Lucas Admin\",\n  \"email\": \"admin.{{runId}}@empresa.com\",\n  \"password\": \"123456\",\n  \"tenantId\": \"{{tenantId}}\"\n}"
+          "raw": "{\n  \"name\": \"Lucas Admin\",\n  \"email\": \"admin.{{runId}}@empresa.com\",\n  \"password\": \"123456\",\n  \"tenantId\": \"{{tenantId}}\",\n  \"registrationToken\": \"{{registrationToken}}\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/auth/register",

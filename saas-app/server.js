@@ -78,6 +78,23 @@ const registerGracefulShutdown = (server) => {
 };
 
 const startServer = async () => {
+  const rateLimitStore = (process.env.RATE_LIMIT_STORE || 'mongodb').trim().toLowerCase();
+  if (!['mongodb', 'memory'].includes(rateLimitStore)) {
+    console.error('RATE_LIMIT_STORE deve ser mongodb ou memory.');
+    process.exit(1);
+  }
+
+  if (
+    process.env.NODE_ENV === 'production' &&
+    (process.env.ALLOW_PUBLIC_MULTI_REGISTER === 'true' ||
+      process.env.ALLOW_DIRECT_PLAN_CHANGE === 'true')
+  ) {
+    console.error(
+      'ALLOW_PUBLIC_MULTI_REGISTER e ALLOW_DIRECT_PLAN_CHANGE devem permanecer desativados em produção.'
+    );
+    process.exit(1);
+  }
+
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim().length < MIN_JWT_SECRET_LENGTH) {
     console.error(
       `JWT_SECRET ausente ou fraca no arquivo .env (mínimo de ${MIN_JWT_SECRET_LENGTH} caracteres).`

@@ -108,6 +108,18 @@ const createRateLimiter = ({
 } = {}) => {
   const memoryFallbackStore = createMemoryRateLimitStore({ windowMs, maxEntries });
   const mongoStore = createMongoRateLimitStore();
+  let lastFallbackWarningAt = 0;
+
+  const logFallbackWarning = (reason) => {
+    const warningTime = Date.now();
+    if (warningTime - lastFallbackWarningAt >= 60 * 1000) {
+      lastFallbackWarningAt = warningTime;
+      console.error(
+        '[RateLimit] Store compartilhado indisponível; usando memória local.',
+        reason || 'Disconnected'
+      );
+    }
+  };
 
   const resolveActiveStore = () => {
     if (store && typeof store.increment === 'function') {
@@ -115,8 +127,11 @@ const createRateLimiter = ({
     }
 
     const configuredStore = (process.env.RATE_LIMIT_STORE || 'mongodb').trim().toLowerCase();
-    if (configuredStore === 'mongodb' && mongoose.connection.readyState === 1) {
-      return mongoStore;
+    if (configuredStore === 'mongodb') {
+      if (mongoose.connection.readyState === 1) {
+        return mongoStore;
+      }
+      logFallbackWarning(`readyState=${mongoose.connection.readyState}`);
     }
 
     return memoryFallbackStore;
@@ -130,8 +145,9 @@ const createRateLimiter = ({
     let record;
     try {
       record = await activeStore.increment(bucketKey, windowMs);
-    } catch {
+    } catch (error) {
       // Fallback resiliente em memória caso o store externo oscile momentaneamente
+      logFallbackWarning(error?.name || 'Error');
       record = await memoryFallbackStore.increment(bucketKey, windowMs);
     }
 

@@ -38,10 +38,30 @@ npm start
 
 > Na inicialização, os planos padrão (`freemium`: até 3 usuários, `premium`: usuários ilimitados) são populados automaticamente na coleção `plans` caso ainda não existam.
 
+O cadastro público de tenant aceita somente planos sem custo enquanto não houver integração de cobrança. A resposta de `POST /tenants` inclui um `registrationToken` de uso único, válido por 24 horas; envie esse valor em `POST /auth/register` junto com o `tenantId` para cadastrar o primeiro admin. Caso o prazo de 24 horas expire sem o cadastro do primeiro usuário (ou em tenants antigos ainda sem usuários), o nome é liberado automaticamente ao recriar o tenant em `POST /tenants` ou na reconciliação de inicialização.
+
+Quando o mesmo e-mail está cadastrado em mais de um tenant com a mesma senha, o login retorna `409` e exige `tenantId` para identificar a conta. `ALLOW_PUBLIC_MULTI_REGISTER` e `ALLOW_DIRECT_PLAN_CHANGE` permanecem desativados em produção.
+
+Com `RATE_LIMIT_STORE=mongodb`, os contadores são compartilhados entre instâncias. Se esse armazenamento falhar durante uma requisição, a API usa temporariamente o contador em memória local e registra um aviso limitado a 1 por minuto; esse fallback preserva disponibilidade, mas não compartilha o limite entre instâncias.
+
 4. Execute a suíte de testes automatizados:
 
 ```bash
 npm test
+```
+
+## Execução no GitHub Codespaces / Dev Containers
+
+O repositório inclui configuração pronta em `.devcontainer/` (**Node.js 22** + **MongoDB 8.0** configurado automaticamente como Replica Set `rs0`, com suporte nativo a transações ACID):
+
+1. No GitHub, clique em **Code → Codespaces → Create codespace on main**.
+2. Aguarde a inicialização automática (o script `.devcontainer/setup.js` instala as dependências e gera `saas-app/.env` com `JWT_SECRET` seguro e `TRUST_PROXY=1`).
+3. No terminal do Codespace, inicie a API ou rode os testes:
+
+```bash
+cd saas-app
+npm test
+npm start
 ```
 
 ## Principais Endpoints
@@ -50,9 +70,9 @@ npm test
 | :--- | :--- | :---: | :---: | :--- |
 | `GET` | `/plans` | Pública | — | Lista os planos disponíveis cadastrados no MongoDB |
 | `GET` | `/plans/:name` | Pública | — | Consulta detalhes de um plano específico |
-| `POST` | `/tenants` | Pública (Rate Limited) | — | Cadastra um novo tenant vinculado a um plano válido |
-| `POST` | `/auth/register` | Pública (Rate Limited) | — | Registra o 1º usuário (`admin`) do tenant recém-criado |
-| `POST` | `/auth/login` | Pública (Rate Limited) | — | Autentica usuário ativo e emite token JWT (`1h`) |
+| `POST` | `/tenants` | Pública (Rate Limited) | — | Cadastra tenant em plano gratuito e retorna token para o primeiro cadastro |
+| `POST` | `/auth/register` | Pública (Rate Limited) | — | Registra o 1º usuário (`admin`) usando `tenantId` e `registrationToken` |
+| `POST` | `/auth/login` | Pública (Rate Limited) | — | Autentica usuário ativo; aceita `tenantId` para distinguir contas |
 | `GET` | `/tenants` | Bearer JWT | `admin`/`member` | Retorna o tenant do usuário autenticado |
 | `GET` | `/tenants/:id` | Bearer JWT | `admin`/`member` | Consulta dados do próprio tenant |
 | `PUT` / `PATCH` | `/tenants/:id` | Bearer JWT | `admin` | Atualiza dados do próprio tenant |

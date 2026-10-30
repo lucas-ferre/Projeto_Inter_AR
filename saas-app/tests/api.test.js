@@ -22,10 +22,20 @@ const { isValidEmail, validatePasswordRules } = require('../middleware/validateR
 
 let server;
 let baseUrl;
+const registrationTokens = new Map();
 
 const apiRequest = async (path, { method = 'GET', token, rawAuthHeader, body } = {}) => {
+  const hasExplicitRegistrationToken =
+    body !== undefined && Object.prototype.hasOwnProperty.call(body, 'registrationToken');
+  const requestBody =
+    path === '/auth/register' && body !== undefined && !hasExplicitRegistrationToken
+      ? {
+          ...body,
+          registrationToken: registrationTokens.get(String(body.tenantId)),
+        }
+      : body;
   const headers = {};
-  if (body !== undefined) {
+  if (requestBody !== undefined) {
     headers['Content-Type'] = 'application/json';
   }
   if (rawAuthHeader !== undefined) {
@@ -37,10 +47,13 @@ const apiRequest = async (path, { method = 'GET', token, rawAuthHeader, body } =
   const response = await fetch(`${baseUrl}${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: requestBody !== undefined ? JSON.stringify(requestBody) : undefined,
   });
 
   const data = response.status === 204 ? null : await response.json();
+  if (method === 'POST' && path === '/tenants' && data?.registrationToken) {
+    registrationTokens.set(String(data._id), data.registrationToken);
+  }
   return { status: response.status, headers: response.headers, data };
 };
 
@@ -641,4 +654,287 @@ describe('SaaS App — Auditoria & Suíte de Integração Completa', () => {
     assert.ok(persistedBucket);
     assert.equal(persistedBucket.count, 4);
   });
+
+  it('9. Onboarding seguro: bloqueia plano pago, valida/apaga registrationToken e recicla tenants abandonados (>24h)', async () => {
+    await RateLimitBucket.deleteMany({});
+
+    // 9.1. Criação pública de tenant rejeita planos pagos (price > 0) com 403
+    const paidTenantRes = await apiRequest('/tenants', {
+      method: 'POST',
+      body: { name: 'Empresa Premium Sem Billing', plan: 'premium' },
+    });
+    assert.equal(paidTenantRes.status, 403);
+
+    // 9.2. Criação em plano gratuito retorna registrationToken de 64 hex chars e armazena apenas hash no banco
+    const freeTenantRes = await apiRequest('/tenants', {
+      method: 'POST',
+      body: { name: 'Empresa Onboarding Seguro', plan: 'freemium' },
+    });
+    assert.equal(freeTenantRes.status, 201);
+    const tenantId = freeTenantRes.data._id;
+    const validRegToken = freeTenantRes.data.registrationToken;
+    assert.match(validRegToken, /^[a-f\d]{64}$/i);
+    assert.equal(freeTenantRes.data.registrationTokenHash, undefined);
+
+    const rawBeforeReg = await Tenant.findById(tenantId)
+      .select('+registrationTokenHash +registrationTokenExpiresAt')
+      .lean();
+    assert.ok(rawBeforeReg.registrationTokenHash);
+    assert.notEqual(rawBeforeReg.registrationTokenHash, validRegToken);
+
+    // 9.3. Registro inicial sem token (403), token malformado (400) e token incorreto (403)
+    const missingTokenReg = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Sem Token',
+        email: 'semtoken@onboarding.com',
+        password: 'Password123',
+        tenantId,
+        registrationToken: undefined,
+      },
+    });
+    assert.equal(missingTokenReg.status, 403);
+
+    const malformedTokenReg = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Token Malformado',
+        email: 'malformado@onboarding.com',
+        password: 'Password123',
+        tenantId,
+        registrationToken: 'token-invalido',
+      },
+    });
+    assert.equal(malformedTokenReg.status, 400);
+
+    const wrongTokenReg = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Token Errado',
+        email: 'errado@onboarding.com',
+        password: 'Password123',
+        tenantId,
+        registrationToken: '0'.repeat(64),
+      },
+    });
+    assert.equal(wrongTokenReg.status, 403);
+
+    // 9.4. Registro com token válido conclui como admin e remove hash/expiração do banco
+    const validReg = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Admin Onboarding',
+        email: 'admin@onboarding.com',
+        password: 'Password123',
+        tenantId,
+        registrationToken: validRegToken,
+      },
+    });
+    assert.equal(validReg.status, 201);
+    assert.equal(validReg.data.role, 'admin');
+
+    const rawAfterReg = await Tenant.findById(tenantId)
+      .select('+registrationTokenHash +registrationTokenExpiresAt +adminCount')
+      .lean();
+    assert.equal(rawAfterReg.registrationTokenHash, undefined);
+    assert.equal(rawAfterReg.registrationTokenExpiresAt, undefined);
+    assert.equal(rawAfterReg.adminCount, 1);
+
+    // 9.5. Tenant não inicializado cujo token expirou (>24h) não trava o nome permanentemente
+    const abandonedRes = await apiRequest('/tenants', {
+      method: 'POST',
+      body: { name: 'Empresa Abandonada 24h', plan: 'freemium' },
+    });
+    assert.equal(abandonedRes.status, 201);
+    const abandonedId = abandonedRes.data._id;
+    const expiredToken = abandonedRes.data.registrationToken;
+
+    await Tenant.updateOne(
+      { _id: abandonedId },
+      { $set: { registrationTokenExpiresAt: new Date(Date.now() - 60 * 1000) } }
+    );
+
+    const expiredRegAttempt = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Admin Atrasado',
+        email: 'atrasado@abandonada.com',
+        password: 'Password123',
+        tenantId: abandonedId,
+        registrationToken: expiredToken,
+      },
+    });
+    assert.equal(expiredRegAttempt.status, 403);
+
+    const reclaimedRes = await apiRequest('/tenants', {
+      method: 'POST',
+      body: { name: 'Empresa Abandonada 24h', plan: 'freemium' },
+    });
+    assert.equal(reclaimedRes.status, 201);
+    assert.notEqual(reclaimedRes.data._id, abandonedId);
+
+    const reclaimedAdminReg = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Admin Recriado',
+        email: 'admin@recriada.com',
+        password: 'Password123',
+        tenantId: reclaimedRes.data._id,
+        registrationToken: reclaimedRes.data.registrationToken,
+      },
+    });
+    assert.equal(reclaimedAdminReg.status, 201);
+  });
+
+  it('10. Concorrência de adminCount: impede inflação em promoções simultâneas e bloqueia remoção mútua do último admin', async () => {
+    await RateLimitBucket.deleteMany({});
+
+    const tenantRes = await apiRequest('/tenants', {
+      method: 'POST',
+      body: { name: 'Concorrencia Admins Corp', plan: 'freemium' },
+    });
+    assert.equal(tenantRes.status, 201);
+    const tenantId = tenantRes.data._id;
+
+    const admin1Reg = await apiRequest('/auth/register', {
+      method: 'POST',
+      body: {
+        name: 'Admin Um',
+        email: 'admin1@concorrencia.com',
+        password: 'Password123',
+        tenantId,
+      },
+    });
+    assert.equal(admin1Reg.status, 201);
+    const admin1Id = admin1Reg.data._id;
+
+    const admin1Login = await apiRequest('/auth/login', {
+      method: 'POST',
+      body: { email: 'admin1@concorrencia.com', password: 'Password123' },
+    });
+    const admin1Token = admin1Login.data.token;
+
+    const memberRes = await apiRequest('/users', {
+      method: 'POST',
+      token: admin1Token,
+      body: {
+        name: 'Membro Promovivel',
+        email: 'admin2@concorrencia.com',
+        password: 'Password123',
+      },
+    });
+    assert.equal(memberRes.status, 201);
+    const admin2Id = memberRes.data._id;
+
+    // 10.1. 4 promoções concorrentes do MESMO member -> adminCount fica exatamente 2 sem inflação
+    const parallelPromotions = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        apiRequest(`/users/${admin2Id}`, {
+          method: 'PATCH',
+          token: admin1Token,
+          body: { role: 'admin' },
+        })
+      )
+    );
+    const validPromoStatuses = parallelPromotions.every(
+      (r) => r.status === 200 || r.status === 409
+    );
+    assert.equal(
+      validPromoStatuses,
+      true,
+      'Todas as respostas devem ser 200 (sucesso/idempotente) ou 409 (conflito)'
+    );
+    assert.ok(
+      parallelPromotions.some((r) => r.status === 200),
+      'Ao menos 1 requisição deve concluir com 200'
+    );
+
+    const tenantAfterPromo = await Tenant.findById(tenantId).select('+adminCount').lean();
+    assert.equal(
+      tenantAfterPromo.adminCount,
+      2,
+      'adminCount deve ser exatamente 2, sem inflação por requisições concorrentes'
+    );
+
+    // 10.2. Admin 1 e Admin 2 tentam excluir um ao outro simultaneamente -> apenas 1 exclusão vence, restando 1 admin
+    const admin2Login = await apiRequest('/auth/login', {
+      method: 'POST',
+      body: { email: 'admin2@concorrencia.com', password: 'Password123' },
+    });
+    const admin2Token = admin2Login.data.token;
+
+    const mutualDeletions = await Promise.all([
+      apiRequest(`/users/${admin2Id}`, { method: 'DELETE', token: admin1Token }),
+      apiRequest(`/users/${admin1Id}`, { method: 'DELETE', token: admin2Token }),
+    ]);
+
+    const succeededDel = mutualDeletions.filter((r) => r.status === 200);
+    const blockedLastAdminDel = mutualDeletions.filter((r) => r.status === 400);
+    assert.equal(succeededDel.length, 1, 'Apenas uma exclusão deve vencer a corrida');
+    assert.equal(blockedLastAdminDel.length, 1, 'A segunda exclusão deve ser barrada com 400');
+
+    const tenantFinal = await Tenant.findById(tenantId).select('+adminCount').lean();
+    const actualRemainingAdmins = await User.countDocuments({ tenantId, role: 'admin' });
+    assert.equal(tenantFinal.adminCount, 1);
+    assert.equal(actualRemainingAdmins, 1);
+  });
+
+  it('11. Fallback resiliente do Rate Limiter em memória local com limitação (throttling) de logs', async () => {
+    const failingStore = {
+      async increment() {
+        const err = new Error('Simulated shared store failure');
+        err.name = 'MongoNetworkError';
+        throw err;
+      },
+    };
+
+    const limiter = createRateLimiter({
+      scope: 'fallback-throttle-test',
+      windowMs: 60 * 1000,
+      maxRequests: 2,
+      store: failingStore,
+    });
+
+    const invoke = (ip) =>
+      new Promise((resolve) => {
+        const headers = {};
+        const req = { ip };
+        const res = {
+          statusCode: 200,
+          setHeader(k, v) {
+            headers[k.toLowerCase()] = v;
+          },
+          status(code) {
+            this.statusCode = code;
+            return this;
+          },
+          json(payload) {
+            resolve({ allowed: false, statusCode: this.statusCode, headers, payload });
+          },
+        };
+        limiter(req, res, () => resolve({ allowed: true, statusCode: 200, headers }));
+      });
+
+    const originalConsoleError = console.error;
+    const warnings = [];
+    console.error = (...args) => {
+      warnings.push(args);
+    };
+
+    try {
+      const r1 = await invoke('198.51.100.42');
+      const r2 = await invoke('198.51.100.42');
+      const r3 = await invoke('198.51.100.42');
+
+      assert.equal(r1.allowed, true);
+      assert.equal(r2.allowed, true);
+      assert.equal(r3.allowed, false);
+      assert.equal(r3.statusCode, 429);
+      assert.equal(warnings.length, 1, 'Deve emitir apenas 1 aviso por janela de 60s');
+      assert.match(String(warnings[0][0]), /usando memória local/i);
+    } finally {
+      console.error = originalConsoleError;
+    }
+  });
+
 });

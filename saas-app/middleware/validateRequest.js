@@ -78,7 +78,7 @@ const validateRegister = (req, res, next) => {
     return res.status(400).json({ message: 'Corpo da requisição inválido.' });
   }
 
-  const { name, email, password, tenantId } = req.body;
+  const { name, email, password, tenantId, registrationToken } = req.body;
 
   if (!isValidName(name)) {
     return res
@@ -101,6 +101,13 @@ const validateRegister = (req, res, next) => {
 
   if (!mongoose.isValidObjectId(tenantId.trim())) {
     return res.status(400).json({ message: 'O tenantId informado é inválido.' });
+  }
+
+  if (
+    registrationToken !== undefined &&
+    (typeof registrationToken !== 'string' || !/^[a-f\d]{64}$/i.test(registrationToken))
+  ) {
+    return res.status(400).json({ message: 'O código de registro informado é inválido.' });
   }
 
   return next();

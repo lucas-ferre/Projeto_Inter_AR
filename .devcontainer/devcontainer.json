@@ -1,0 +1,34 @@
+{
+  "name": "SaaS App Multitenant (Node.js 22 + MongoDB 8)",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/Projeto_Inter_AR",
+  "remoteUser": "node",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "SaaS Multitenant API",
+      "onAutoForward": "notify"
+    },
+    "27017": {
+      "label": "MongoDB 8 (Replica Set rs0)",
+      "onAutoForward": "silent"
+    }
+  },
+  "postCreateCommand": "node .devcontainer/setup.js",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "mongodb.mongodb-vscode"
+      ],
+      "settings": {
+        "mdb.presetConnections": [
+          {
+            "name": "Local Codespace MongoDB (rs0)",
+            "connectionString": "mongodb://localhost:27017/saas"
+          }
+        ]
+      }
+    }
+  }
+}

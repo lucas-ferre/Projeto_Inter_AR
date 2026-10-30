@@ -54,8 +54,8 @@ router.get('/', verifyToken, async (req, res, next) => {
 
 router.post('/', tenantCreationLimiter, validateTenant, async (req, res, next) => {
   try {
-    const tenant = await createTenant(req.body);
-    return res.status(201).json(tenant);
+    const { tenant, registrationToken } = await createTenant(req.body);
+    return res.status(201).json({ ...tenant.toJSON(), registrationToken });
   } catch (error) {
     return next(error);
   }

@@ -12,8 +12,8 @@ exports.login = async (req, res, next) => {
 
 exports.register = async (req, res, next) => {
   try {
-    const { name, email, password, tenantId } = req.body;
-    const user = await registerUser({ name, email, password, tenantId });
+    const { name, email, password, tenantId, registrationToken } = req.body;
+    const user = await registerUser({ name, email, password, tenantId, registrationToken });
     return res.status(201).json(user);
   } catch (error) {
     return next(error);

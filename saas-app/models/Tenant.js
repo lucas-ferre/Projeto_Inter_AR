@@ -7,6 +7,9 @@ const sanitizeTransform = (doc, ret) => {
   delete ret.userCount;
   delete ret.initializedAt;
   delete ret.status;
+  delete ret.adminCount;
+  delete ret.registrationTokenHash;
+  delete ret.registrationTokenExpiresAt;
   return ret;
 };
 
@@ -30,6 +33,20 @@ const tenantSchema = new mongoose.Schema({
     enum: ['active', 'deleting'],
     default: 'active',
     index: true,
+  },
+  adminCount: {
+    type: Number,
+    default: 0,
+    min: 0,
+    select: false,
+  },
+  registrationTokenHash: {
+    type: String,
+    select: false,
+  },
+  registrationTokenExpiresAt: {
+    type: Date,
+    select: false,
   },
   userCount: {
     type: Number,
