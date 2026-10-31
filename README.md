@@ -51,6 +51,12 @@ Quando o mesmo e-mail está cadastrado em mais de um tenant com a mesma senha, o
 
 Com `RATE_LIMIT_STORE=mongodb`, os contadores são compartilhados entre instâncias. Se esse armazenamento falhar durante uma requisição, a API usa temporariamente o contador em memória local e registra um aviso limitado a 1 por minuto; esse fallback preserva disponibilidade, mas não compartilha o limite entre instâncias.
 
+Nas rotas de login e registro, a API falha de forma fechada (`503`) se o rate limiter compartilhado em MongoDB estiver indisponível, evitando aceitar tentativas de autenticação sem o limite distribuído. As demais rotas mantêm o fallback local para priorizar disponibilidade.
+
+O script `npm run setup:env` exige confirmação em terminal. Em execução não interativa, use `npm run setup:env -- --yes` somente quando quiser autorizar explicitamente a criação ou alteração do `.env`; a rotação de uma chave existente também requer `--force`.
+
+O workflow de CI executa os testes unitários/de integração e os scripts end-to-end com Node.js 22 e MongoDB em replica set. A reconciliação de dados legados e exclusões pendentes permanece no startup para preservar a compatibilidade; em instalações grandes, avalie movê-la para uma migração/tarefa operacional controlada antes de remover essa garantia.
+
 4. Execute a suíte de testes automatizados:
 
 ```bash
@@ -77,7 +83,7 @@ Consulte [test-scripts/README.md](file:///C:/Users/lucas/Downloads/Lucas/Capacit
 
 ## Execução no GitHub Codespaces / Dev Containers
 
-O repositório inclui configuração pronta em `.devcontainer/` (**Node.js 22** + **MongoDB 8.0** configurado automaticamente como Replica Set `rs0`, com suporte nativo a transações ACID):
+O repositório inclui configuração pronta em `.devcontainer/` (**Node.js 22** + **MongoDB 8.0** com porta restrita à interface local `127.0.0.1` e configurado automaticamente como Replica Set `rs0`, com suporte nativo a transações ACID):
 
 1. No GitHub, clique em **Code → Codespaces → Create codespace on main**.
 2. Aguarde a inicialização automática (o script `.devcontainer/setup.js` instala as dependências e gera `saas-app/.env` com `JWT_SECRET` seguro e `TRUST_PROXY=1`).

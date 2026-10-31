@@ -105,6 +105,7 @@ const createRateLimiter = ({
   maxRequests = 25,
   maxEntries = 10000,
   store,
+  failClosed = false,
 } = {}) => {
   const memoryFallbackStore = createMemoryRateLimitStore({ windowMs, maxEntries });
   const mongoStore = createMongoRateLimitStore();
@@ -114,10 +115,17 @@ const createRateLimiter = ({
     const warningTime = Date.now();
     if (warningTime - lastFallbackWarningAt >= 60 * 1000) {
       lastFallbackWarningAt = warningTime;
-      console.error(
-        '[RateLimit] Store compartilhado indisponível; usando memória local.',
-        reason || 'Disconnected'
-      );
+      if (failClosed) {
+        console.error(
+          `[RateLimit] Store compartilhado indisponível (scope: ${scope}); bloqueando requisições com 503 (fail-closed).`,
+          reason || 'Disconnected'
+        );
+      } else {
+        console.error(
+          `[RateLimit] Store compartilhado indisponível (scope: ${scope}); usando memória local (fail-open).`,
+          reason || 'Disconnected'
+        );
+      }
     }
   };
 
@@ -132,6 +140,9 @@ const createRateLimiter = ({
         return mongoStore;
       }
       logFallbackWarning(`readyState=${mongoose.connection.readyState}`);
+      if (failClosed) {
+        return null;
+      }
     }
 
     return memoryFallbackStore;
@@ -142,12 +153,24 @@ const createRateLimiter = ({
     const bucketKey = `${scope}:${ip}`;
     const activeStore = resolveActiveStore();
 
+    if (!activeStore) {
+      res.setHeader('Retry-After', '5');
+      return res.status(503).json({
+        message: 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+      });
+    }
+
     let record;
     try {
       record = await activeStore.increment(bucketKey, windowMs);
     } catch (error) {
-      // Fallback resiliente em memória caso o store externo oscile momentaneamente
       logFallbackWarning(error?.name || 'Error');
+      if (failClosed) {
+        res.setHeader('Retry-After', '5');
+        return res.status(503).json({
+          message: 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+        });
+      }
       record = await memoryFallbackStore.increment(bucketKey, windowMs);
     }
 

@@ -21,9 +21,8 @@ const promptConfirmation = (question) => {
     return Promise.resolve(true);
   }
 
-  // Se não for TTY e o stream já encerrou, evita travamento em ambientes não interativos
-  if (!process.stdin.isTTY && process.stdin.destroyed) {
-    return Promise.resolve(true);
+  if (!process.stdin.isTTY) {
+    return Promise.resolve(null);
   }
 
   return new Promise((resolve) => {
@@ -41,15 +40,36 @@ const promptConfirmation = (question) => {
       if (['n', 'nao', 'não', 'no'].includes(normalized)) {
         return resolve(false);
       }
-      return resolve(true);
+      if (['', 's', 'sim', 'y', 'yes'].includes(normalized)) {
+        return resolve(true);
+      }
+      return resolve(false);
     });
 
     rl.on('close', () => {
       if (!answered) {
-        resolve(true);
+        resolve(null);
       }
     });
   });
+};
+
+const confirmOrExit = async (question, cancellationMessage) => {
+  const confirmed = await promptConfirmation(question);
+  if (confirmed === true) {
+    return true;
+  }
+
+  if (confirmed === null) {
+    console.error(
+      '[setup-env] Confirmação interativa indisponível. Execute em um terminal ou informe --yes explicitamente.'
+    );
+    process.exitCode = 1;
+    return false;
+  }
+
+  console.log(cancellationMessage);
+  return false;
 };
 
 const generateSecureKey = () => crypto.randomBytes(64).toString('hex');
@@ -82,13 +102,13 @@ const run = async () => {
       process.exit(1);
     }
 
-    const confirmed = await promptConfirmation(
-      '\nDeseja criar o arquivo .env e gerar automaticamente uma chave JWT_SECRET segura? (S/n): '
+    const confirmed = await confirmOrExit(
+      '\nDeseja criar o arquivo .env e gerar automaticamente uma chave JWT_SECRET segura? (S/n): ',
+      '[setup-env] Operação cancelada pelo usuário. O arquivo .env não foi criado.'
     );
 
     if (!confirmed) {
-      console.log('[setup-env] Operação cancelada pelo usuário. O arquivo .env não foi criado.');
-      process.exit(0);
+      return;
     }
 
     const template = fs.readFileSync(envExamplePath, 'utf8').replace(/\r\n/g, '\n');
@@ -121,10 +141,12 @@ const run = async () => {
     ? '\nO arquivo .env já existe. Deseja sobrescrever a JWT_SECRET com uma nova chave? (S/n): '
     : '\nO arquivo .env está sem uma JWT_SECRET segura configurada. Deseja gerar e adicioná-la agora? (S/n): ';
 
-  const confirmed = await promptConfirmation(promptMessage);
+  const confirmed = await confirmOrExit(
+    promptMessage,
+    '[setup-env] Operação cancelada pelo usuário. O arquivo .env não foi modificado.'
+  );
   if (!confirmed) {
-    console.log('[setup-env] Operação cancelada pelo usuário. O arquivo .env não foi modificado.\n');
-    process.exit(0);
+    return;
   }
 
   let updatedEnv;

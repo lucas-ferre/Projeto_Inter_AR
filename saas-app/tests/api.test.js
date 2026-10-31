@@ -932,6 +932,42 @@ describe('SaaS App — Auditoria & Suíte de Integração Completa', () => {
       assert.equal(r3.statusCode, 429);
       assert.equal(warnings.length, 1, 'Deve emitir apenas 1 aviso por janela de 60s');
       assert.match(String(warnings[0][0]), /usando memória local/i);
+
+      // 11.2. Verifica que limiter com failClosed: true retorna 503 e loga bloqueio fail-closed específico
+      const failClosedLimiter = createRateLimiter({
+        scope: 'auth-failclosed-test',
+        windowMs: 60 * 1000,
+        maxRequests: 5,
+        store: failingStore,
+        failClosed: true,
+      });
+
+      const invokeFailClosed = (ip) =>
+        new Promise((resolve) => {
+          const headers = {};
+          const req = { ip };
+          const res = {
+            statusCode: 200,
+            setHeader(k, v) {
+              headers[k.toLowerCase()] = v;
+            },
+            status(code) {
+              this.statusCode = code;
+              return this;
+            },
+            json(payload) {
+              resolve({ allowed: false, statusCode: this.statusCode, headers, payload });
+            },
+          };
+          failClosedLimiter(req, res, () => resolve({ allowed: true, statusCode: 200, headers }));
+        });
+
+      const fcResult = await invokeFailClosed('198.51.100.99');
+      assert.equal(fcResult.allowed, false);
+      assert.equal(fcResult.statusCode, 503);
+      assert.equal(warnings.length, 2);
+      assert.match(String(warnings[1][0]), /bloqueando requisições com 503 \(fail-closed\)/i);
+      assert.ok(!String(warnings[1][0]).includes('usando memória local'));
     } finally {
       console.error = originalConsoleError;
     }

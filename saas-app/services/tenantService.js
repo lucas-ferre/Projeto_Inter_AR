@@ -4,10 +4,12 @@ const Tenant = require('../models/Tenant');
 const User = require('../models/User');
 const { createOperationalError } = require('./errors');
 const { getPlanByName } = require('./planService');
+const { sanitizeSensitiveText } = require('../middleware/errorHandler');
 
 const { TENANT_NAME_COLLATION } = Tenant;
 const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 100;
+const MAX_RECONCILIATION_RETRIES = 3;
 
 const isTransactionUnsupportedError = (error) =>
   Boolean(
@@ -113,6 +115,35 @@ const reconcilePendingTenantDeletions = async () => {
   }
 
   return { cleanedTenants, cleanedOrphanUsers };
+};
+
+const schedulePendingTenantReconciliation = (attempt = 1) => {
+  const delayMs = Math.min(1000 * 2 ** (attempt - 1), 5000);
+  const timer = setTimeout(async () => {
+    try {
+      const result = await reconcilePendingTenantDeletions();
+      console.info(
+        `[TenantCleanup] Reconciliação concluída: ${result.cleanedTenants} tenant(s) e ${result.cleanedOrphanUsers} usuário(s) removidos.`
+      );
+    } catch (error) {
+      console.error(
+        `[TenantCleanup] Tentativa ${attempt}/${MAX_RECONCILIATION_RETRIES} falhou:`,
+        sanitizeSensitiveText(error?.message || 'Falha inesperada')
+      );
+
+      if (attempt < MAX_RECONCILIATION_RETRIES) {
+        schedulePendingTenantReconciliation(attempt + 1);
+      } else {
+        console.error(
+          '[TenantCleanup] A exclusão pendente permanece bloqueada e será reavaliada na próxima inicialização.'
+        );
+      }
+    }
+  }, delayMs);
+
+  if (typeof timer.unref === 'function') {
+    timer.unref();
+  }
 };
 
 const syncLegacyTenantsAndUsers = async () => {
@@ -538,13 +569,7 @@ exports.deleteTenant = async (tenantId) => {
       deletedUsersCount: deleteResult.deletedCount,
     };
   } catch (cleanupError) {
-    // Mantém status='deleting' bloqueando acessos e agenda tentativa automática de reconciliação
-    const timer = setTimeout(() => {
-      reconcilePendingTenantDeletions().catch(() => {});
-    }, 1000);
-    if (typeof timer.unref === 'function') {
-      timer.unref();
-    }
+    schedulePendingTenantReconciliation();
     throw cleanupError;
   }
 };
