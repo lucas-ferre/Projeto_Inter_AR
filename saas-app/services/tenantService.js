@@ -120,14 +120,15 @@ const reconcilePendingTenantDeletions = async () => {
 const schedulePendingTenantReconciliation = (attempt = 1) => {
   const delayMs = Math.min(1000 * 2 ** (attempt - 1), 5000);
   const timer = setTimeout(async () => {
+    const startedAt = Date.now();
     try {
       const result = await reconcilePendingTenantDeletions();
       console.info(
-        `[TenantCleanup] Reconciliação concluída: ${result.cleanedTenants} tenant(s) e ${result.cleanedOrphanUsers} usuário(s) removidos.`
+        `[TenantCleanup] outcome=success tentativa=${attempt} duraçãoMs=${Date.now() - startedAt} tenantsRemovidos=${result.cleanedTenants} usuariosOrfaosRemovidos=${result.cleanedOrphanUsers}`
       );
     } catch (error) {
       console.error(
-        `[TenantCleanup] Tentativa ${attempt}/${MAX_RECONCILIATION_RETRIES} falhou:`,
+        `[TenantCleanup] outcome=failure tentativa=${attempt}/${MAX_RECONCILIATION_RETRIES} duraçãoMs=${Date.now() - startedAt}:`,
         sanitizeSensitiveText(error?.message || 'Falha inesperada')
       );
 
@@ -216,8 +217,20 @@ const syncLegacyTenantsAndUsers = async () => {
     }
   }
 
-  await reconcileTenantCounters();
-  await reconcilePendingTenantDeletions();
+  const reconciliationStartedAt = Date.now();
+  try {
+    const reconciledCounters = await reconcileTenantCounters();
+    const cleanupResult = await reconcilePendingTenantDeletions();
+    console.info(
+      `[TenantCleanup] outcome=startup-success duraçãoMs=${Date.now() - reconciliationStartedAt} contadoresCorrigidos=${reconciledCounters} tenantsRemovidos=${cleanupResult.cleanedTenants} usuariosOrfaosRemovidos=${cleanupResult.cleanedOrphanUsers}`
+    );
+  } catch (error) {
+    console.error(
+      `[TenantCleanup] outcome=startup-failure duraçãoMs=${Date.now() - reconciliationStartedAt}:`,
+      sanitizeSensitiveText(error?.message || 'Falha inesperada')
+    );
+    throw error;
+  }
 };
 
 const reconcileTenantCounters = async () => {

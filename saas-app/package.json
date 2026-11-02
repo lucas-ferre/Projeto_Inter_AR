@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test tests/*.test.js",
+    "test:standalone": "node --test tests/integration/tenantDeletionStandalone.test.js",
     "test:scripts": "node ../test-scripts/run-all.js",
     "test:smoke": "node ../test-scripts/test-smoke.js",
     "test:onboarding": "node ../test-scripts/test-onboarding.js",

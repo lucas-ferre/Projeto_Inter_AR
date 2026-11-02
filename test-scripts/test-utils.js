@@ -28,7 +28,7 @@ const isServerUp = async () => {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1500);
-    const res = await fetch(`${API_URL}/plans`, { signal: controller.signal });
+    const res = await fetch(`${API_URL}/health/ready`, { signal: controller.signal });
     clearTimeout(timeout);
     return res.status === 200;
   } catch {

@@ -14,3 +14,6 @@ npm-debug.log*
 .postman/
 postman/environments/
 postman/globals/
+
+# Backups locais de dados
+/backups/

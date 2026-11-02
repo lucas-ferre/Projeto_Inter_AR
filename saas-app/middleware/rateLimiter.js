@@ -110,23 +110,48 @@ const createRateLimiter = ({
   const memoryFallbackStore = createMemoryRateLimitStore({ windowMs, maxEntries });
   const mongoStore = createMongoRateLimitStore();
   let lastFallbackWarningAt = 0;
+  let storeUnavailableSince = null;
+  let failuresSinceLastLog = 0;
+  let failuresDuringOutage = 0;
 
   const logFallbackWarning = (reason) => {
     const warningTime = Date.now();
+    if (storeUnavailableSince === null) {
+      storeUnavailableSince = warningTime;
+    }
+    failuresSinceLastLog += 1;
+    failuresDuringOutage += 1;
+
     if (warningTime - lastFallbackWarningAt >= 60 * 1000) {
       lastFallbackWarningAt = warningTime;
+      const failureCount = failuresSinceLastLog;
+      failuresSinceLastLog = 0;
       if (failClosed) {
         console.error(
-          `[RateLimit] Store compartilhado indisponível (scope: ${scope}); bloqueando requisições com 503 (fail-closed).`,
+          `[RateLimit] event=store_unavailable scope=${scope} mode=fail-closed; bloqueando requisições com 503 (fail-closed). falhasNaJanela=${failureCount} indisponivelMs=${warningTime - storeUnavailableSince}`,
           reason || 'Disconnected'
         );
       } else {
         console.error(
-          `[RateLimit] Store compartilhado indisponível (scope: ${scope}); usando memória local (fail-open).`,
+          `[RateLimit] event=store_unavailable scope=${scope} mode=fail-open; usando memória local (fail-open). falhasNaJanela=${failureCount} indisponivelMs=${warningTime - storeUnavailableSince}`,
           reason || 'Disconnected'
         );
       }
     }
+  };
+
+  const logStoreRecovery = () => {
+    if (storeUnavailableSince === null) {
+      return;
+    }
+
+    console.info(
+      `[RateLimit] event=store_recovered scope=${scope} falhasDuranteIndisponibilidade=${failuresDuringOutage} indisponivelMs=${Date.now() - storeUnavailableSince}`
+    );
+    storeUnavailableSince = null;
+    failuresSinceLastLog = 0;
+    failuresDuringOutage = 0;
+    lastFallbackWarningAt = 0;
   };
 
   const resolveActiveStore = () => {
@@ -163,6 +188,9 @@ const createRateLimiter = ({
     let record;
     try {
       record = await activeStore.increment(bucketKey, windowMs);
+      if (activeStore === mongoStore) {
+        logStoreRecovery();
+      }
     } catch (error) {
       logFallbackWarning(error?.name || 'Error');
       if (failClosed) {

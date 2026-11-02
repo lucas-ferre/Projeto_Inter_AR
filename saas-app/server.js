@@ -7,6 +7,7 @@ const planRoutes = require('./routes/plan');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
 const tenantRoutes = require('./routes/tenant');
+const healthRoutes = require('./routes/health');
 const securityHeaders = require('./middleware/securityHeaders');
 const corsMiddleware = require('./middleware/cors');
 const { createRateLimiter } = require('./middleware/rateLimiter');
@@ -31,6 +32,7 @@ const apiLimiter = createRateLimiter({ scope: 'global', windowMs: 60 * 1000, max
 
 app.use(securityHeaders);
 app.use(corsMiddleware);
+app.use('/health', healthRoutes);
 app.use(apiLimiter);
 app.use(express.json({ limit: '10kb' }));
 

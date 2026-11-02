@@ -41,6 +41,16 @@ jobs:
       - name: Run API end-to-end scripts
         run: npm run test:scripts --prefix saas-app
 
-      - name: Stop MongoDB
+      - name: Start standalone MongoDB
+        run: docker compose -f .github/docker-compose.standalone.yml up -d --wait
+
+      - name: Test tenant deletion recovery on standalone
+        env:
+          STANDALONE_MONGO_URI: mongodb://127.0.0.1:27018/saas_standalone_ci
+        run: npm run test:standalone --prefix saas-app
+
+      - name: Stop MongoDB instances
         if: always()
-        run: docker compose -f .devcontainer/docker-compose.yml down
+        run: |
+          docker compose -f .github/docker-compose.standalone.yml down
+          docker compose -f .devcontainer/docker-compose.yml down

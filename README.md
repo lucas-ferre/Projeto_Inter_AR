@@ -53,9 +53,15 @@ Com `RATE_LIMIT_STORE=mongodb`, os contadores são compartilhados entre instânc
 
 Nas rotas de login e registro, a API falha de forma fechada (`503`) se o rate limiter compartilhado em MongoDB estiver indisponível, evitando aceitar tentativas de autenticação sem o limite distribuído. As demais rotas mantêm o fallback local para priorizar disponibilidade.
 
+Os eventos de indisponibilidade do rate limiter incluem o escopo, a quantidade de falhas desde o último aviso e a duração observada; quando o armazenamento MongoDB volta a responder, a API registra a recuperação. As tentativas de reconciliação de tenants registram resultado, duração, tentativa e quantidade de registros removidos.
+
+Os endpoints `/health/live` e `/health/ready` separam a disponibilidade do processo da prontidão do serviço. O endpoint de prontidão testa o MongoDB e retorna `503` quando a dependência não responde.
+
 O script `npm run setup:env` exige confirmação em terminal. Em execução não interativa, use `npm run setup:env -- --yes` somente quando quiser autorizar explicitamente a criação ou alteração do `.env`; a rotação de uma chave existente também requer `--force`.
 
-O workflow de CI executa os testes unitários/de integração e os scripts end-to-end com Node.js 22 e MongoDB em replica set. A reconciliação de dados legados e exclusões pendentes permanece no startup para preservar a compatibilidade; em instalações grandes, avalie movê-la para uma migração/tarefa operacional controlada antes de remover essa garantia.
+O workflow de CI executa os testes unitários/de integração e os scripts end-to-end com Node.js 22, cobrindo MongoDB em replica set e standalone. A reconciliação de dados legados e exclusões pendentes permanece no startup para preservar a compatibilidade; em instalações grandes, avalie movê-la para uma migração/tarefa operacional controlada antes de remover essa garantia.
+
+Consulte [docs/OPERATIONS.md](docs/OPERATIONS.md) para recomendações de backup, restauração e leitura dos sinais operacionais.
 
 4. Execute a suíte de testes automatizados:
 
@@ -99,6 +105,8 @@ npm start
 
 | Método | Rota | Autenticação | Papel | Descrição |
 | :--- | :--- | :---: | :---: | :--- |
+| `GET` | `/health/live` | Pública | — | Confirma que o processo da API está ativo |
+| `GET` | `/health/ready` | Pública | — | Confirma que a API consegue consultar o MongoDB |
 | `GET` | `/plans` | Pública | — | Lista os planos disponíveis cadastrados no MongoDB |
 | `GET` | `/plans/:name` | Pública | — | Consulta detalhes de um plano específico |
 | `POST` | `/tenants` | Pública (Rate Limited) | — | Cadastra tenant em plano gratuito e retorna token para o primeiro cadastro |

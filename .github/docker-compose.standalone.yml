@@ -1,0 +1,17 @@
+services:
+  mongodb-standalone:
+    image: mongo:8.0
+    command: ["mongod", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:27018:27017"
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "quit(db.adminCommand({ ping: 1 }).ok === 1 ? 0 : 1)"
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 5s

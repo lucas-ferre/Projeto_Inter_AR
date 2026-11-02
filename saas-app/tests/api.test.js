@@ -105,6 +105,20 @@ describe('SaaS App — Auditoria & Suíte de Integração Completa', () => {
     assert.equal(validatePasswordRules('SenhaForte123'), null);
   });
 
+  it('1.1. Endpoints de liveness e readiness reportam a saúde da API e do MongoDB', async () => {
+    const live = await apiRequest('/health/live');
+    assert.equal(live.status, 200);
+    assert.deepEqual(live.data, { status: 'ok' });
+    assert.equal(live.headers.get('cache-control'), 'no-store');
+
+    const ready = await apiRequest('/health/ready');
+    assert.equal(ready.status, 200);
+    assert.deepEqual(ready.data, {
+      status: 'ready',
+      dependencies: { mongodb: 'ok' },
+    });
+  });
+
   it('2. Integração do model Plan no MongoDB (seed automático e validação dinâmica)', async () => {
     const res = await apiRequest('/plans');
     assert.equal(res.status, 200);
