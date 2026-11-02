@@ -1,24 +1,9 @@
 const express = require('express');
-const { listPlans, getPlanByName } = require('../services/planService');
+const { listPlans, getPlan } = require('../controllers/planController');
 
 const router = express.Router();
 
-router.get('/', async (req, res, next) => {
-  try {
-    const plans = await listPlans();
-    return res.json(plans);
-  } catch (error) {
-    return next(error);
-  }
-});
-
-router.get('/:name', async (req, res, next) => {
-  try {
-    const plan = await getPlanByName(req.params.name);
-    return res.json(plan);
-  } catch (error) {
-    return next(error);
-  }
-});
+router.get('/', listPlans);
+router.get('/:name', getPlan);
 
 module.exports = router;

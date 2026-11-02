@@ -4,7 +4,7 @@ const {
   getUserByTenant,
   updateUserInTenant,
   deleteUserFromTenant,
-} = require('../services/authService');
+} = require('../services/userService');
 
 exports.listUsers = async (req, res, next) => {
   try {

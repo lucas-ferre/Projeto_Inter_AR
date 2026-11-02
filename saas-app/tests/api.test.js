@@ -62,8 +62,8 @@ describe('SaaS App — Auditoria & Suíte de Integração Completa', () => {
     await connectDatabase(TEST_DB_URI);
     await mongoose.connection.db.dropDatabase();
     await mongoose.syncIndexes();
-    const { seedDefaultPlans } = require('../services/planService');
-    await seedDefaultPlans();
+    const { bootstrapDatabase } = require('../services/bootstrapService');
+    await bootstrapDatabase();
 
     await new Promise((resolve) => {
       server = app.listen(0, '127.0.0.1', () => {

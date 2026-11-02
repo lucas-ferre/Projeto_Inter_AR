@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env'), quiet: true });
 
 const express = require('express');
 const { mongoose, connectDatabase } = require('./config/db');
+const { bootstrapDatabase } = require('./services/bootstrapService');
 const planRoutes = require('./routes/plan');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
@@ -131,6 +132,7 @@ const startServer = async () => {
 
   try {
     await connectDatabase();
+    await bootstrapDatabase();
     const server = app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
     registerGracefulShutdown(server);
     return server;

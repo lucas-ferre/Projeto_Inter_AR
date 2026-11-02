@@ -1,7 +1,7 @@
 const path = require('path');
 const { spawn } = require('child_process');
 
-const API_URL = process.env.API_URL || 'http://localhost:3000';
+const API_URL = process.env.API_URL || 'http://127.0.0.1:3000';
 const saasAppDir = path.resolve(__dirname, '..', 'saas-app');
 
 const isColorSupported =

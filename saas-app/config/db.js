@@ -1,6 +1,4 @@
 const mongoose = require('mongoose');
-const { seedDefaultPlans } = require('../services/planService');
-const { syncLegacyTenantsAndUsers } = require('../services/tenantService');
 const { sanitizeSensitiveText } = require('../middleware/errorHandler');
 
 let listenersAttached = false;
@@ -21,8 +19,6 @@ const connectDatabase = async (uri = process.env.MONGO_URI) => {
 
   attachConnectionListeners();
   await mongoose.connect(uri);
-  await seedDefaultPlans();
-  await syncLegacyTenantsAndUsers();
   console.log('MongoDB conectado');
   return mongoose;
 };
